@@ -1,0 +1,16 @@
+.DS_Store
+build/
+DerivedData/
+*.xcodeproj
+*.xcworkspace
+!*.xcworkspace/contents.xcworkspacedata
+xcuserdata/
+*.xcuserstate
+.swiftpm/
+*.log
+CODEX-ONLY.md
+PUBLISH-README.md
+.env
+.env.*
+auth.json
+*.xcresult/

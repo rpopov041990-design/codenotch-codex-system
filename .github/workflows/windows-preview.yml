@@ -1,0 +1,33 @@
+name: Windows preview
+on:
+  push:
+    paths: ['windows/**', '.github/workflows/windows-preview.yml']
+  pull_request:
+    paths: ['windows/**', '.github/workflows/windows-preview.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Parser and read-only filesystem tests
+        run: dotnet run --project windows/Codenotch.Tests -c Release
+      - name: Build portable x64 preview
+        run: dotnet publish windows/Codenotch.Windows -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o artifacts/windows-x64
+      - name: Native startup smoke test
+        shell: pwsh
+        run: |
+          $p = Start-Process ./artifacts/windows-x64/Codenotch.Windows.exe -ArgumentList '--smoke-test' -PassThru
+          if (-not $p.WaitForExit(20000)) { $p.Kill(); throw 'UI startup timed out' }
+          if ($p.ExitCode -ne 0) { throw "Startup failed: $($p.ExitCode)" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: codenotch-windows-x64-TEST
+          path: artifacts/windows-x64/
+          retention-days: 14

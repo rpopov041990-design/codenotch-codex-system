@@ -14,3 +14,6 @@ PUBLISH-README.md
 .env.*
 auth.json
 *.xcresult/
+**/bin/
+**/obj/
+artifacts/

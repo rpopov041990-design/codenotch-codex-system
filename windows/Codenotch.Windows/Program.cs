@@ -36,7 +36,7 @@ sealed class NotchForm : Form
         Text = "Codenotch Windows · TEST";
         FormBorderStyle = FormBorderStyle.None; ShowInTaskbar = false; TopMost = true;
         StartPosition = FormStartPosition.Manual; BackColor = Color.FromArgb(23, 29, 40);
-        DoubleBuffered = true; KeyPreview = true;
+        DoubleBuffered = true; KeyPreview = true; AutoScaleMode = AutoScaleMode.None;
         var menu = new ContextMenuStrip();
         var pin = new ToolStripMenuItem("Закрепить раскрытой") { CheckOnClick = true };
         pin.CheckedChanged += (_, _) => { pinned = pin.Checked; SetExpanded(pinned); };
@@ -74,6 +74,8 @@ sealed class NotchForm : Form
                 loading = true; nextCodex = DateTime.UtcNow.AddSeconds(60);
                 string home = Environment.GetEnvironmentVariable("CODEX_HOME") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".codex");
                 try { usage = await Task.Run(() => CodexReader.Read(home)); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+                { usage = null; }
                 finally { loading = false; }
                 if (!IsDisposed) RefreshMetrics();
             }
@@ -118,8 +120,8 @@ sealed class NotchForm : Form
         base.OnPaint(e); var g = e.Graphics; g.ScaleTransform(ScaleFactor, ScaleFactor); g.SmoothingMode = SmoothingMode.AntiAlias;
         using var track = new Pen(Color.FromArgb(57, 66, 81), 5);
         using var arc = new Pen(Color.FromArgb(90, 214, 197), 5) { StartCap = LineCap.Round, EndCap = LineCap.Round };
-        using var title = new Font("Segoe UI", 9, FontStyle.Bold, GraphicsUnit.Point);
-        using var detailFont = new Font("Segoe UI", 8, FontStyle.Regular, GraphicsUnit.Point);
+        using var title = new Font("Segoe UI", 12, FontStyle.Bold, GraphicsUnit.Pixel);
+        using var detailFont = new Font("Segoe UI", 11, FontStyle.Regular, GraphicsUnit.Pixel);
         using var white = new SolidBrush(Color.WhiteSmoke); using var gray = new SolidBrush(Color.FromArgb(180, 191, 208));
         using var centered = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
         using var clipped = new StringFormat { Trimming = StringTrimming.EllipsisCharacter };

@@ -16,7 +16,15 @@ final class NotchViewModel: ObservableObject {
     private var systemSampler: SystemMetricsSampler?
 
     func systemMetric(for snapshot: ProviderSnapshot) -> SystemMetric? {
-        systemMetrics.first { $0.id == snapshot.id }
+        if snapshot.id == "system.tokens" { return tokenMetric }
+        return systemMetrics.first { $0.id == snapshot.id }
+    }
+
+    var personalTokenUsage: CodexTokenUsage? { providerReadings.first { $0.tokenUsage != nil }?.tokenUsage }
+    private var tokenMetric: SystemMetric {
+        SystemMetric(id: "system.tokens", title: "Личные токены Codex", symbol: "chart.bar.fill", fraction: nil,
+                     value: personalTokenUsage?.usageToday(now: now).map { UsageFormat.tokens($0) } ?? "—",
+                     detail: "Токены аккаунта за сегодня. При наведении — график за 30 дней. Не процент лимита.")
     }
 
     func startSystemMetrics() {
@@ -55,7 +63,8 @@ final class NotchViewModel: ObservableObject {
         providerReadings = providerSnapshots.filter { !$0.id.hasPrefix("system.") }
         let hoveredID = hoveredSnapshot?.id
         let metrics = systemMetrics.filter { UserDefaults.standard.object(forKey: $0.id + ".enabled") as? Bool ?? true }
-        let next = metrics.map(\.snapshot) + ProviderOrder.cells(from: providerReadings, keeping: displaySnapshots).map(withPerformance)
+        let tokenCells = (UserDefaults.standard.object(forKey: "system.tokens.enabled") as? Bool ?? true) ? [tokenMetric.snapshot] : []
+        let next = metrics.map(\.snapshot) + tokenCells + ProviderOrder.cells(from: providerReadings, keeping: displaySnapshots).map(withPerformance)
         let nextHoveredIndex = hoveredID.flatMap { id in next.firstIndex { $0.id == id } }
         if hoveredIndex != nextHoveredIndex { hoveredIndex = nextHoveredIndex }
         displaySnapshots = next

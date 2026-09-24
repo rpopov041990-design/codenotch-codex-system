@@ -24,6 +24,7 @@ struct SystemMetric: Identifiable, Equatable {
 
 final class SystemMetricsSampler {
     private var previousCPU: (busy: UInt64, total: UInt64)?
+    private let chipTemperature = ChipTemperature()
 
     func sample() -> [SystemMetric] {
         var cpu = host_cpu_load_info()
@@ -79,6 +80,11 @@ final class SystemMetricsSampler {
         func bytes(_ value: Double) -> String {
             ByteCountFormatter.string(fromByteCount: Int64(max(0, value)), countStyle: .file)
         }
+        let temperatures = chipTemperature.read()
+        let average = ChipTemperature.mean(temperatures.cpu + temperatures.gpu)
+        let temperatureDetail = average.map { _ in
+            "Среднее тепловых зон: CPU — \(temperatures.cpu.count), GPU — \(temperatures.gpu.count). Равный вес датчиков."
+        } ?? "Датчики CPU/GPU недоступны. Температура не вычисляется из загрузки или состояния macOS."
         return [
             SystemMetric(id: "system.ram", title: "Оперативная память", symbol: "memorychip", fraction: ram,
                          value: percent(ram), detail: ram == nil ? "Нет данных" : "Занято \(bytes(usedRAM)) из \(bytes(totalRAM)). Без файлового кэша; включает сжатую память."),
@@ -86,8 +92,9 @@ final class SystemMetricsSampler {
                          value: percent(cpuFraction), detail: "Общая загрузка процессора за интервал измерения. Первое значение появится через 3 секунды."),
             SystemMetric(id: "system.disk", title: "Диск", symbol: "internaldrive", fraction: diskFraction,
                          value: percent(diskFraction), detail: diskFraction == nil ? "Нет данных" : "Занято \(bytes(usedDisk)) из \(bytes(totalDisk)). Свободно \(bytes(freeDisk)). Том домашней папки; очищаемое место может учитываться macOS иначе."),
-            SystemMetric(id: "system.thermal", title: "Нагрев", symbol: "thermometer.medium", fraction: nil,
-                         value: thermal, detail: "Тепловое состояние macOS: \(thermal). Это не температура в градусах.")
+            SystemMetric(id: "system.thermal", title: "Средняя температура CPU/GPU", symbol: "thermometer.medium", fraction: nil,
+                         value: average.map { String(format: "%.0f°", $0) } ?? "—",
+                         detail: temperatureDetail + "\nmacOS: \(thermal). Шкала: °C.")
         ] + BatteryReading.read().map { [$0.metric] }.orEmpty
     }
 }
@@ -95,24 +102,37 @@ final class SystemMetricsSampler {
 struct SystemMetricCell: View {
     let metric: SystemMetric
     @Environment(\.codenotchAccentColor) private var accent
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var appeared = false
     var body: some View {
         VStack(spacing: NotchLayout.ringLabelGap) {
             ZStack {
                 Circle().strokeBorder(Palette.ringTrack, lineWidth: NotchLayout.trackStroke)
                 if let fraction = metric.fraction {
-                    Circle().inset(by: NotchLayout.trackStroke / 2).trim(from: 0, to: fraction)
+                    Circle().inset(by: NotchLayout.trackStroke / 2).trim(from: 0, to: appeared ? fraction : 0)
                         .stroke(UsageBand.band(for: metric.isBattery ? 1 - fraction : fraction).color(accent: accent),
                                 style: StrokeStyle(lineWidth: NotchLayout.progressStroke, lineCap: .round))
                         .rotationEffect(.degrees(-90))
                 }
+                if metric.id == "system.thermal" {
+                    Text(metric.value).font(.system(size: NotchLayout.ringDiameter * 0.30, weight: .semibold))
+                        .monospacedDigit().contentTransition(.numericText())
+                        .foregroundStyle(Palette.textPrimary)
+                } else {
                 Image(systemName: metric.symbol).font(.system(size: NotchLayout.ringDiameter * 0.4))
                     .foregroundStyle(Palette.textPrimary)
+                    .symbolEffect(.pulse, options: .repeating, isActive: !reduceMotion && metric.id == "system.tokens")
+                }
             }.frame(width: NotchLayout.ringDiameter, height: NotchLayout.ringDiameter)
-            Text(metric.value).font(Typography.percent).foregroundStyle(Palette.textPrimary)
+            Text(metric.id == "system.thermal" ? "CPU/GPU" : metric.value).font(Typography.percent).foregroundStyle(Palette.textPrimary)
+                .contentTransition(.numericText())
                 .lineLimit(1).minimumScaleFactor(0.5)
                 .frame(width: NotchLayout.ringDiameter, height: NotchLayout.percentLineHeight)
         }
         .frame(height: NotchLayout.cellExtent)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.65), value: metric)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.7), value: appeared)
+        .onAppear { appeared = true }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(metric.title): \(metric.value). \(metric.detail)")
         .help("\(metric.title): \(metric.value)\n\(metric.detail)")
@@ -125,16 +145,57 @@ struct SystemMetricsSettings: View {
     @AppStorage("system.disk.enabled") private var disk = true
     @AppStorage("system.thermal.enabled") private var thermal = true
     @AppStorage("system.battery.enabled") private var battery = true
+    @AppStorage("system.tokens.enabled") private var tokens = true
     var body: some View {
         Section("Системные показатели") {
             Toggle("Оперативная память", isOn: $ram)
             Toggle("Процессор", isOn: $cpu)
             Toggle("Заполненность диска", isOn: $disk)
-            Toggle("Состояние нагрева", isOn: $thermal)
+            Toggle("Средняя температура CPU/GPU", isOn: $thermal)
             Toggle("Заряд и состояние АКБ", isOn: $battery)
-            Text("Появляются вместе с панелью при наведении. Показатели читаются локально каждые 3 секунды, пока панель раскрыта. Нагрев — состояние macOS, не градусы.")
+            Toggle("Личные токены Codex — отдельный график", isOn: $tokens)
+            Text("Показатели обновляются каждые 3 секунды при раскрытой панели. Температура — среднее доступных датчиков CPU/GPU, иначе — прочерк. Токены приходят из профиля Codex и могут запаздывать; это не процент лимита. Пульсация значка — оформление, не признак работы ИИ.")
                 .font(.caption).foregroundStyle(.secondary)
         }
+    }
+}
+
+struct PersonalTokenCard: View {
+    let usage: CodexTokenUsage?
+    let now: Date
+    @Environment(\.codenotchAccentColor) private var accent
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var visible = false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Личные токены Codex").font(.headline)
+            if let usage, !usage.dailyUsageBuckets.isEmpty {
+                let buckets = usage.last30Days(now: now)
+                let maximum = max(1, buckets.map(\.tokens).max() ?? 0)
+                Text("Сегодня: \(usage.usageToday(now: now).map { UsageFormat.tokens($0) } ?? "ожидаются данные") · 30 дней: \(UsageFormat.tokens(usage.usageInLast30Days(now: now)))")
+                    .font(.caption).lineLimit(1).minimumScaleFactor(0.7)
+                HStack(alignment: .bottom, spacing: 3) {
+                    ForEach(buckets) { bucket in
+                        let reported = usage.dailyUsageBuckets.contains { $0.startDate == bucket.startDate }
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(reported ? accent : Color.secondary.opacity(0.2))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: max(2, (visible ? 65 : 0) * Double(max(0, bucket.tokens)) / Double(maximum)))
+                            .help("\(bucket.startDate): \(reported ? UsageFormat.tokens(bucket.tokens) : "нет данных")")
+                            .accessibilityLabel("\(bucket.startDate): \(reported ? UsageFormat.tokens(bucket.tokens) : "нет данных")")
+                    }
+                }.frame(height: 65, alignment: .bottom)
+                HStack { Text(buckets.first?.startDate ?? ""); Spacer(); Text("Сегодня") }.font(.caption2)
+                Text("Весь аккаунт Codex · данные сервера с задержкой. Серый — нет данных; высота — токены за день.")
+                    .font(.caption2).foregroundStyle(.secondary)
+            } else {
+                Text("Данные расхода пока недоступны. Это не нулевой расход.").font(.callout)
+            }
+        }.padding(18)
+            .frame(width: NotchLayout.cardWidth, height: 200, alignment: .topLeading)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.65), value: visible)
+            .onAppear { visible = true }
     }
 }
 

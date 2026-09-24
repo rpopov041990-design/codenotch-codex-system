@@ -61,7 +61,9 @@ struct NotchRootView: View {
                 if let snapshot = model.hoveredSnapshot, let index = model.hoveredIndex,
                    model.isExpanded {
                     Group {
-                    if let metric = model.systemMetric(for: snapshot) {
+                    if snapshot.id == "system.tokens" {
+                        PersonalTokenCard(usage: model.personalTokenUsage, now: model.now)
+                    } else if let metric = model.systemMetric(for: snapshot) {
                         VStack(alignment: .leading, spacing: 10) {
                             Text(metric.title).font(.headline)
                             Text(metric.value).font(.title2.bold())

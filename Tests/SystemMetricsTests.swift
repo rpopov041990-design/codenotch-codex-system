@@ -10,17 +10,39 @@ final class SystemMetricsTests: XCTestCase {
         XCTAssertEqual(SystemMetric.ratio(used: -1, total: 100), 0)
     }
 
-    func testLocalReadingsAndThermalIsNotDegrees() {
+    func testLocalReadingsAndTemperatureIsNotInvented() {
         let readings = SystemMetricsSampler().sample()
         XCTAssertEqual(Array(readings.prefix(4)).map(\.id), ["system.ram", "system.cpu", "system.disk", "system.thermal"])
         XCTAssertNil(readings[1].fraction, "CPU needs two measurements")
         XCTAssertNil(readings[3].fraction, "Thermal state is not a percentage")
-        XCTAssertFalse(readings[3].value.contains("°"))
+        XCTAssertTrue(readings[3].value == "—" || readings[3].value.contains("°"))
         for value in readings.compactMap(\.fraction) {
             XCTAssertTrue((0...1).contains(value))
         }
         XCTAssertNotNil(readings[0].fraction)
         XCTAssertNotNil(readings[2].fraction)
+    }
+
+    func testTemperatureAverageFiltersInvalidReadings() {
+        XCTAssertEqual(ChipTemperature.mean([40, 60]), 50)
+        XCTAssertEqual(ChipTemperature.mean([0, .nan, .infinity, -2, 126, 50]), 50)
+        XCTAssertNil(ChipTemperature.mean([]))
+        XCTAssertNil(ChipTemperature.mean([0, .nan]))
+    }
+
+    @MainActor
+    func testPersonalTokenCellUsesAccountDataWithoutBecomingProvider() {
+        let model = NotchViewModel()
+        var codex = ProviderSnapshot(id: "codex", displayName: "Codex", glyph: .openai,
+                                     fidelity: .official, status: .ok, windows: [])
+        codex.tokenUsage = CodexTokenUsage(dailyUsageBuckets: [.init(startDate: "2026-09-24", tokens: 123)])
+        model.updateSnapshots([codex])
+        XCTAssertEqual(model.personalTokenUsage, codex.tokenUsage)
+        XCTAssertEqual(model.snapshots.map(\.id), ["codex"])
+        model.updateSnapshots([codex])
+        XCTAssertEqual(model.displaySnapshots.filter { $0.id == "system.tokens" }.count, 1)
+        model.updateSnapshots([])
+        XCTAssertNil(model.personalTokenUsage)
     }
 
     @MainActor

@@ -21,6 +21,7 @@ final class NotchViewModel: ObservableObject {
     }
 
     var personalTokenUsage: CodexTokenUsage? { providerReadings.first { $0.tokenUsage != nil }?.tokenUsage }
+    var personalQuota: ProviderSnapshot? { providerReadings.first { $0.id == "codex" || $0.id.hasPrefix("codex:") } }
     private var tokenMetric: SystemMetric {
         SystemMetric(id: "system.tokens", title: "Личные токены Codex", symbol: "chart.bar.fill", fraction: nil,
                      value: personalTokenUsage?.usageToday(now: now).map { UsageFormat.tokens($0) } ?? "—",
@@ -496,7 +497,7 @@ final class NotchViewModel: ObservableObject {
 
     private func contentCardHeight(sessionCap: Int) -> CGFloat {
         displaySnapshots.map { snapshot in
-            systemMetric(for: snapshot) != nil ? 200 : NotchLayout.cardHeight(windowCount: snapshot.windows.count,
+            snapshot.id == "system.tokens" ? PersonalTokenCard.height : systemMetric(for: snapshot) != nil ? 200 : NotchLayout.cardHeight(windowCount: snapshot.windows.count,
                 groupCount: Set(snapshot.windows.compactMap(\.group)).count,
                 sessionCount: snapshot.localModel == nil ? sessionCap + 1 : 0,
                 sessionCap: sessionCap,

@@ -88,6 +88,14 @@ struct CodexTokenUsage: Codable, Equatable, Sendable {
 /// `additional_rate_limits` and `code_review_rate_limit` meter something else
 /// and are deliberately left out.
 enum CodexUsage {
+    /// Independent optional decoder: malformed reset metadata must not hide usage.
+    static func resetCreditCount(from data: Data) -> Int? {
+        struct Credits: Decodable { let available_count: Int? }
+        struct Envelope: Decodable { let rate_limit_reset_credits: Credits? }
+        guard let result = try? JSONDecoder().decode(Envelope.self, from: data),
+              let count = result.rate_limit_reset_credits?.available_count, count >= 0 else { return nil }
+        return count
+    }
     private struct Response: Decodable {
         let rate_limit: RateLimit?
     }

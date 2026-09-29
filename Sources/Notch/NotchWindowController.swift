@@ -372,7 +372,7 @@ final class NotchWindowController {
     private func tooltipRect(index: Int) -> CGRect? {
         guard model.displaySnapshots.indices.contains(index) else { return nil }
         let snapshot = model.displaySnapshots[index]
-        let cardHeight = model.systemMetric(for: snapshot) != nil ? 200 : NotchLayout.cardHeight(
+        let cardHeight = snapshot.id == "system.tokens" ? PersonalTokenCard.height : model.systemMetric(for: snapshot) != nil ? 200 : NotchLayout.cardHeight(
             windowCount: snapshot.windows.count,
             groupCount: snapshot.windowGroupCount,
             sessionCount: snapshot.localModel == nil ? (model.activity(for: snapshot.id)?.sessions.count ?? 0) : 0,

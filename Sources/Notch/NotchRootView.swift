@@ -62,7 +62,7 @@ struct NotchRootView: View {
                    model.isExpanded {
                     Group {
                     if snapshot.id == "system.tokens" {
-                        PersonalTokenCard(usage: model.personalTokenUsage, now: model.now)
+                        PersonalTokenCard(usage: model.personalTokenUsage, quota: model.personalQuota, now: model.now)
                     } else if let metric = model.systemMetric(for: snapshot) {
                         VStack(alignment: .leading, spacing: 10) {
                             Text(metric.title).font(.headline)
@@ -246,7 +246,7 @@ struct NotchRootView: View {
         let stack = ForEach(Array(model.displaySnapshots.enumerated()), id: \.element.id) { index, snapshot in
             Group {
             if let metric = model.systemMetric(for: snapshot) {
-                SystemMetricCell(metric: metric)
+                SystemMetricCell(metric: metric, animate: model.isExpanded)
             } else {
             ProviderCell(
                 snapshot: snapshot,
@@ -339,7 +339,7 @@ struct NotchRootView: View {
 
     private func tooltipLength(_ snapshot: ProviderSnapshot) -> CGFloat {
         if model.systemMetric(for: snapshot) != nil {
-            return model.edge.isVertical ? 200 : NotchLayout.cardWidth
+            return model.edge.isVertical ? (snapshot.id == "system.tokens" ? PersonalTokenCard.height : 200) : NotchLayout.cardWidth
         }
         return model.edge.isVertical
             ? NotchLayout.cardHeight(
@@ -369,7 +369,7 @@ struct NotchRootView: View {
     ) -> CGPoint {
         let card = model.edge.isVertical
             ? NotchLayout.cardWidth
-            : model.systemMetric(for: snapshot) != nil ? 200 : NotchLayout.cardHeight(
+            : snapshot.id == "system.tokens" ? PersonalTokenCard.height : model.systemMetric(for: snapshot) != nil ? 200 : NotchLayout.cardHeight(
                 windowCount: snapshot.windows.count,
                 groupCount: snapshot.windowGroupCount,
                 sessionCount: snapshot.localModel == nil ? (model.activity(for: snapshot.id)?.sessions.count ?? 0) : 0,

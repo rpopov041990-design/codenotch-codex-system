@@ -2,6 +2,62 @@ import XCTest
 @testable import Codenotch
 
 final class SystemMetricsTests: XCTestCase {
+    func testThreeUsersWithLargerOwnerShare() {
+        let plan = QuotaSharing(people: 3, weight: 2)
+        XCTAssertEqual(plan.mine, 0.5)
+        XCTAssertEqual(plan.eachOther, 0.25)
+        XCTAssertEqual(plan.dailyText(total: 18, share: plan.mine), "9,0")
+    }
+    func testSharingBoundsAndConservation() {
+        for people in 1...4 {
+            for weight in 1...4 {
+                let plan = QuotaSharing(people: people, weight: weight)
+                XCTAssertEqual(plan.mine + Double(people - 1) * plan.eachOther, 1, accuracy: 0.00001)
+            }
+        }
+        XCTAssertEqual(QuotaSharing(people: 0, weight: 0).mine, 1)
+        XCTAssertEqual(QuotaSharing(people: 99, weight: 99).people, 4)
+        XCTAssertEqual(QuotaSharing(people: 99, weight: 99).weight, 4)
+    }
+    func testResetCreditsDecodeZeroPositiveAndUnknown() {
+        func count(_ json: String) -> Int? { CodexUsage.resetCreditCount(from: Data(json.utf8)) }
+        XCTAssertEqual(count(#"{"rate_limit_reset_credits":{"available_count":0}}"#), 0)
+        XCTAssertEqual(count(#"{"rate_limit_reset_credits":{"available_count":3}}"#), 3)
+        XCTAssertNil(count(#"{"credits":{"balance":"100"}}"#))
+        XCTAssertNil(count(#"{"rate_limit_reset_credits":{"available_count":-1}}"#))
+        XCTAssertNil(count(#"{"rate_limit_reset_credits":{"available_count":"2"}}"#))
+        XCTAssertNil(count(#"{"rate_limit_reset_credits":null}"#))
+    }
+    func testDailyQuotaReserveAndShortRemainingCycle() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let budget = DailyQuotaBudget.calculate(used: 0.4, reset: now.addingTimeInterval(3 * 86400), now: now)!
+        XCTAssertEqual(budget.percentPerDay, 18, accuracy: 0.0001)
+        XCTAssertEqual(budget.remainingPercent, 60, accuracy: 0.0001)
+        let short = DailyQuotaBudget.calculate(used: 0.4, reset: now.addingTimeInterval(3600), now: now)!
+        XCTAssertEqual(short.percentPerDay, 54, accuracy: 0.0001)
+        XCTAssertEqual(DailyQuotaBudget.calculate(used: 1.1, reset: now.addingTimeInterval(3600), now: now)?.percentPerDay, 0)
+    }
+    func testDailyQuotaRejectsMissingStaleAndInvalidData() {
+        let now = Date()
+        XCTAssertNil(DailyQuotaBudget.calculate(used: nil, reset: now.addingTimeInterval(86400), now: now))
+        XCTAssertNil(DailyQuotaBudget.calculate(used: .nan, reset: now.addingTimeInterval(86400), now: now))
+        XCTAssertNil(DailyQuotaBudget.calculate(used: -0.1, reset: now.addingTimeInterval(86400), now: now))
+        XCTAssertNil(DailyQuotaBudget.calculate(used: 0.5, reset: now, now: now))
+    }
+    func testThermalColorsFollowOSNotInventedTemperatureLimit() {
+        XCTAssertEqual(MetricHealth.thermal(.nominal), .normal)
+        XCTAssertEqual(MetricHealth.thermal(.fair), .warning)
+        XCTAssertEqual(MetricHealth.thermal(.serious), .serious)
+        XCTAssertEqual(MetricHealth.thermal(.critical), .critical)
+    }
+    func testMemoryPressureUsesDispatchFlagsAndHandlesMissingData() {
+        XCTAssertEqual(MetricHealth.memoryPressure(1), .normal)
+        XCTAssertEqual(MetricHealth.memoryPressure(2), .warning)
+        XCTAssertEqual(MetricHealth.memoryPressure(4), .critical)
+        XCTAssertEqual(MetricHealth.memoryPressure(nil), .unknown)
+        XCTAssertEqual(MetricHealth.memoryPressure(0), .unknown)
+        XCTAssertEqual(MetricHealth.memoryPressure(3), .unknown)
+    }
     func testRatiosAreBoundedAndMissingIsNotZero() {
         XCTAssertNil(SystemMetric.ratio(used: 1, total: 0))
         XCTAssertNil(SystemMetric.ratio(used: .nan, total: 1))

@@ -84,7 +84,8 @@ actor CodexLocalProvider: UsageProvider {
             fidelity: .official, status: .ok, windows: windows,
             headlineID: windows.first?.id,
             weeklyID: "secondary",
-            tokenUsage: profileUsage
+            tokenUsage: profileUsage,
+            resetCreditsAvailable: CodexUsage.resetCreditCount(from: data)
         )
     }
 
